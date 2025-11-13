@@ -1,1 +1,116 @@
-hi
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gist Toggler</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; line-height: 1.6; max-width: 600px; margin: auto; background-color: #f6f8fa; }
+        h1, h2 { border-bottom: 1px solid #ddd; padding-bottom: 10px; }
+        .control-group { background-color: white; border: 1px solid #ddd; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        button { font-size: 16px; padding: 10px 15px; margin: 5px; border-radius: 6px; border: 1px solid #ccc; cursor: pointer; }
+        button.true { background-color: #2ea44f; color: white; border-color: #2ea44f; }
+        button.false { background-color: #d73a49; color: white; border-color: #d73a49; }
+        input[type="text"], input[type="password"] { width: 95%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        #status { margin-top: 15px; padding: 10px; border-radius: 5px; background-color: #eef; font-family: monospace; }
+        .token-setup { background-color: #fffbdd; border: 1px solid #f0e68c; }
+    </style>
+</head>
+<body>
+
+    <h1>Gist Status Toggler</h1>
+
+    <div class="control-group token-setup">
+        <h2>Configuration</h2>
+        <label for="pat">GitHub Personal Access Token (Classic, `gist` scope):</label>
+        <input type="password" id="pat" placeholder="Paste your token here">
+        <button onclick="saveToken()">Save Token</button>
+        <p><small>Your token is saved only in this browser's local storage. It is not stored in the code.</small></p>
+    </div>
+
+    <div class="control-group">
+        <h2>Controls for 'hi'</h2>
+        <button class="true" onclick="updateGist('hi', true)">Set 'hi' to TRUE</button>
+        <button class="false" onclick="updateGist('hi', false)">Set 'hi' to FALSE</button>
+    </div>
+
+    <div class="control-group">
+        <h2>Controls for 'hello'</h2>
+        <button class="true" onclick="updateGist('hello', true)">Set 'hello' to TRUE</button>
+        <button class="false" onclick="updateGist('hello', false)">Set 'hello' to FALSE</button>
+    </div>
+
+    <div id="status">Status: Waiting for action...</div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const GIST_ID = "65d83dc057b9a4e28bfe63bbfefed9dd";
+        const FILENAME = "remindorkeep.json";
+        
+        const patInput = document.getElementById('pat');
+        const statusDiv = document.getElementById('status');
+        let personalAccessToken = localStorage.getItem('gist_pat');
+
+        // On page load, populate the input if token exists
+        if (personalAccessToken) {
+            patInput.value = personalAccessToken;
+        }
+
+        function saveToken() {
+            personalAccessToken = patInput.value;
+            localStorage.setItem('gist_pat', personalAccessToken);
+            alert('Token saved in browser!');
+        }
+
+        async function updateGist(keyToUpdate, newValue) {
+            if (!personalAccessToken) {
+                statusDiv.textContent = 'Error: Please save your Personal Access Token first.';
+                return;
+            }
+
+            statusDiv.textContent = 'Fetching current Gist...';
+
+            try {
+                // 1. First, GET the current Gist content
+                const getResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`);
+                if (!getResponse.ok) throw new Error(`GitHub API error (GET): ${getResponse.statusText}`);
+                const gist = await getResponse.json();
+                
+                const currentContent = gist.files[FILENAME].content;
+                const data = JSON.parse(currentContent);
+
+                // 2. Modify the content
+                data[keyToUpdate] = newValue;
+                const updatedContent = JSON.stringify(data, null, 2); // Pretty print JSON
+
+                statusDiv.textContent = 'Updating Gist...';
+
+                // 3. PATCH the Gist with the full updated content
+                const patchResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `token ${personalAccessToken}`,
+                        'Accept': 'application/vnd.github.v3+json',
+                    },
+                    body: JSON.stringify({
+                        files: {
+                            [FILENAME]: {
+                                content: updatedContent,
+                            },
+                        },
+                    }),
+                });
+
+                if (!patchResponse.ok) throw new Error(`GitHub API error (PATCH): ${patchResponse.statusText}`);
+                
+                statusDiv.textContent = `Success! Set '${keyToUpdate}' to ${newValue}.`;
+                console.log('Gist updated successfully!');
+
+            } catch (error) {
+                statusDiv.textContent = `Error: ${error.message}`;
+                console.error('Failed to update Gist:', error);
+            }
+        }
+    </script>
+</body>
+</html>
